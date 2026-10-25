@@ -57,4 +57,7 @@ const SEMENTE = [
 ];
 
 // Texto por omissão no fim da folha do plano (vem da app Continuar em Movimento). Editável em Dados.
+// Página do utente (repositório público Paxeko530/planofisio-utente, publicada com tools/publica-web.js).
+const URL_UTENTE_PADRAO = "https://paxeko530.github.io/planofisio-utente/";
+
 const AVISO_PADRAO = "Em caso de dor no peito, tonturas ou falta de ar, pare e contacte o seu fisioterapeuta.";
