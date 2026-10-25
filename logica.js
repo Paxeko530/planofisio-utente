@@ -154,15 +154,21 @@ const Logica = (function () {
   }
 
   function planoDeModelo(modelo, utenteId, agora) {
-    return { ...modelo, id: novoId("p"), utenteId, itens: copiaItens(modelo.itens), criado: agora, alterado: agora };
+    const n = { ...modelo, id: novoId("p"), utenteId, itens: copiaItens(modelo.itens), criado: agora, alterado: agora };
+    delete n.registo;
+    return n;
   }
 
   function modeloDePlano(plano, nome, agora) {
-    return { ...plano, id: novoId("p"), utenteId: null, nome, itens: copiaItens(plano.itens), criado: agora, alterado: agora };
+    const n = { ...plano, id: novoId("p"), utenteId: null, nome, itens: copiaItens(plano.itens), criado: agora, alterado: agora };
+    delete n.registo;
+    return n;
   }
 
   function duplicaPlano(plano, agora) {
-    return { ...plano, id: novoId("p"), nome: (plano.nome + " (cópia)").slice(0, 80), itens: copiaItens(plano.itens), criado: agora, alterado: agora };
+    const n = { ...plano, id: novoId("p"), nome: (plano.nome + " (cópia)").slice(0, 80), itens: copiaItens(plano.itens), criado: agora, alterado: agora };
+    delete n.registo;
+    return n;
   }
 
   const planosComExercicio = (planos, exId) => planos.filter(p => p.itens.some(i => i.exId === exId)).length;
@@ -317,13 +323,22 @@ const Logica = (function () {
       if (p.utenteId !== null && !ids.has(p.utenteId)) return falha("A cópia tem um plano de um utente que não existe.");
       const itens = [];
       for (const i of p.itens) { const l = itemLimpo(i); if (!l) return falha("A cópia tem uma dose inválida."); itens.push(l); }
-      planos.push({ id: p.id, utenteId: p.utenteId, ...r.valor, itens,
+      const registo = {};
+      if (p.registo !== undefined) {
+        if (!ehObjeto(p.registo) || Object.keys(p.registo).length > 400) return falha("A cópia tem um registo inválido.");
+        for (const [dia, x] of Object.entries(p.registo)) {
+          if (!diaValido(dia) || !ehObjeto(x) || !Number.isInteger(x.feitos) || !Number.isInteger(x.total) || x.total < 1 || x.total > 100 || x.feitos < 0 || x.feitos > x.total || !dorValida(x.dor)) return falha("A cópia tem um registo inválido.");
+          registo[dia] = { feitos: x.feitos, total: x.total, dor: x.dor };
+        }
+      }
+      planos.push({ id: p.id, utenteId: p.utenteId, ...r.valor, itens, registo,
                     criado: ehTexto(p.criado, 40) ? p.criado : "", alterado: ehTexto(p.alterado, 40) ? p.alterado : "" });
     }
     const def = ehObjeto(d.definicoes) ? d.definicoes : {};
     const definicoes = { profissional: ehTexto(def.profissional, 80) ? def.profissional : "", aviso: ehTexto(def.aviso, 300) ? def.aviso : "",
                          urlUtente: ehTexto(def.urlUtente, 200) && /^https:\/\/[^\s#?]{3,200}$/.test(def.urlUtente) ? def.urlUtente : "",
-                         validadeDias: [0, 30, 90, 180].includes(def.validadeDias) ? def.validadeDias : 90 };
+                         validadeDias: [0, 30, 90, 180].includes(def.validadeDias) ? def.validadeDias : 90,
+                         contacto: typeof def.contacto === "string" && /^[0-9]{9,15}$/.test(def.contacto) ? def.contacto : "" };
     return { ok: true, estado: { versao: 2, exercicios, utentes, planos, avisoVisto: d.avisoVisto === true, definicoes } };
   }
 
@@ -333,9 +348,11 @@ const Logica = (function () {
     textoMax(f, erros, "aviso", 300, "O aviso pode ter no máximo 300 caracteres.");
     const url = t(f, "urlUtente");
     if (url && !/^https:\/\/[^\s#?]{3,200}$/.test(url)) erros.urlUtente = "Escreva um endereço que comece por https:// (sem espaços).";
+    const ct = t(f, "contacto").split(" ").join("").split("+").join("");
+    if (ct && !/^[0-9]{9,15}$/.test(ct)) erros.contacto = "Escreva o número com indicativo do país, por exemplo 351912345678.";
     const vd = f.validadeDias === undefined || f.validadeDias === "" ? 90 : Number(f.validadeDias);
     if (![0, 30, 90, 180].includes(vd)) erros.validadeDias = "Escolha uma das validades da lista.";
-    return fim(erros, { profissional: t(f, "profissional"), aviso: t(f, "aviso"), urlUtente: url, validadeDias: vd });
+    return fim(erros, { profissional: t(f, "profissional"), aviso: t(f, "aviso"), urlUtente: url, validadeDias: vd, contacto: ct });
   }
 
   /* ---------- link para o utente ---------- */
@@ -372,6 +389,8 @@ const Logica = (function () {
       }
     }
     const o = { v: 1, n: plano.nome, f: plano.frequencia, i };
+    if (plano.id) o.k = plano.id;
+    if (def.contacto) o.c = def.contacto;
     if (plano.notas) o.o = plano.notas;
     const u = primeiroNome(utenteNome); if (u) o.u = u;
     if (def.profissional) o.p = def.profissional;
@@ -394,6 +413,8 @@ const Logica = (function () {
       if (!Number.isInteger(o.e)) return falha("Este link não está completo ou foi alterado.");
       if (Math.floor(Date.parse(agora) / 86400000) > o.e) return { ok: false, expirado: true, erro: "Este plano já não está disponível." };
     }
+    if (o.k !== undefined && !idSeguro(o.k)) return falha("Este link não está completo ou foi alterado.");
+    if (o.c !== undefined && !(typeof o.c === "string" && /^[0-9]{9,15}$/.test(o.c))) return falha("Este link não está completo ou foi alterado.");
     for (const [c, max] of [["u", 80], ["p", 80], ["a", 300]]) if (o[c] !== undefined && !ehTexto(o[c], max)) return falha("Este link não está completo ou foi alterado.");
 
     const itens = [], exercicios = [], vistos = new Set();
@@ -410,8 +431,82 @@ const Logica = (function () {
     const r = importaPlano({ exercicios: [] }, { formato: "planofisio-plano", versao: 1,
       plano: { nome: o.n, frequencia: o.f, notas: o.o || "", itens }, exercicios }, regioes, objetivos, figuras, agora);
     if (!r.ok) return falha("Este link não está completo ou foi alterado.");
-    return { ok: true, plano: r.plano, exercicios: r.novos, paraNome: o.u || "", profissional: o.p || "", aviso: o.a || "" };
+    return { ok: true, plano: r.plano, exercicios: r.novos, paraNome: o.u || "", profissional: o.p || "", aviso: o.a || "", k: o.k || "", contacto: o.c || "" };
   }
+
+  /* ---------- resposta do utente (resumo enviado por mensagem) ---------- */
+  // O utente envia uma mensagem normal (WhatsApp) com um resumo legível e uma linha «Código» que a app da
+  // fisioterapeuta sabe ler. Tudo o que vem de fora é validado como não confiável.
+  const DIA_MS = 86400000;
+  const NL = String.fromCharCode(10);
+  const ROTULO_DOR = ["sem dor", "um pouco de dor", "dor forte"];
+  const diaValido = d => typeof d === "string" && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(d) && !Number.isNaN(Date.parse(d + "T00:00:00Z"));
+  const dorValida = d => d === null || d === 0 || d === 1 || d === 2;
+  const dataCurta = d => d.slice(8, 10) + "/" + d.slice(5, 7);
+
+  // pro = {dias:{AAAA-MM-DD:[ids feitos]}, dor:{AAAA-MM-DD:0|1|2}}; devolve os últimos 60 dias com registo.
+  function resumoDoUtente(planoId, pro, ids, hoje) {
+    const limite = Date.parse(hoje + "T00:00:00Z") - 60 * DIA_MS, out = [];
+    const dias = (pro && pro.dias) || {};
+    for (const d of new Set([...Object.keys(dias), ...Object.keys((pro && pro.dor) || {})])) {
+      if (!diaValido(d) || Date.parse(d + "T00:00:00Z") < limite) continue;
+      const feitos = new Set((Array.isArray(dias[d]) ? dias[d] : []).filter(id => ids.includes(id))).size;
+      const dor = pro.dor && pro.dor[d] !== undefined && dorValida(pro.dor[d]) ? pro.dor[d] : null;
+      if (feitos > 0 || dor !== null) out.push([d, feitos, ids.length, dor]);
+    }
+    out.sort((a, b) => (a[0] < b[0] ? 1 : -1));
+    return { v: 1, k: planoId, d: out.slice(0, 60) };
+  }
+
+  function mensagemResumo({ nomePlano, paraNome, resumo }) {
+    const L = [paraNome ? "Olá! Resumo de " + paraNome + " do plano «" + nomePlano + "»:" : "Olá! Resumo do plano «" + nomePlano + "»:"];
+    for (const [d, f, t, dor] of resumo.d.slice(0, 7)) L.push("• " + dataCurta(d) + ": " + f + " de " + t + " exercícios" + (dor === null ? "" : ", " + ROTULO_DOR[dor]));
+    L.push("", "Código (não apague): PF1." + b64url.codifica(JSON.stringify(resumo)));
+    return L.join(NL);
+  }
+
+  // Procura o código numa mensagem colada. Devolve {ok, k, d} ou {ok:false, erro}.
+  function lerResposta(texto) {
+    const falha = erro => ({ ok: false, erro });
+    const m = /PF1[.]([A-Za-z0-9_-]{8,12000})/.exec(String(texto || ""));
+    if (!m) return falha("Não encontrei o código do resumo. Cole a mensagem inteira, com a linha «Código».");
+    let o;
+    try { o = JSON.parse(b64url.descodifica(m[1])); } catch (e) { return falha("O código do resumo está incompleto. Peça ao utente para enviar de novo."); }
+    if (!ehObjeto(o) || o.v !== 1 || !idSeguro(o.k) || !Array.isArray(o.d) || o.d.length > 60) return falha("Este resumo não é válido.");
+    const d = [];
+    for (const x of o.d) {
+      if (!Array.isArray(x) || x.length !== 4) return falha("Este resumo não é válido.");
+      const [dia, f, t, dor] = x;
+      if (!diaValido(dia) || !Number.isInteger(f) || !Number.isInteger(t) || f < 0 || t < 1 || t > 100 || f > t || !dorValida(dor)) return falha("Este resumo não é válido.");
+      d.push([dia, f, t, dor]);
+    }
+    return { ok: true, k: o.k, d };
+  }
+
+  // Junta o resumo ao registo do plano (o que o utente enviou por último prevalece). Devolve quantos dias mudaram.
+  function aplicaResposta(plano, resposta) {
+    plano.registo = plano.registo || {};
+    let n = 0;
+    for (const [dia, f, t, dor] of resposta.d) {
+      const a = plano.registo[dia];
+      if (!a || a.feitos !== f || a.total !== t || a.dor !== dor) { plano.registo[dia] = { feitos: f, total: t, dor }; n++; }
+    }
+    return n;
+  }
+
+  // Dias completos e parciais nos últimos `dias` dias (contando hoje).
+  function adesao(plano, hoje, dias) {
+    const fim = Date.parse(hoje + "T00:00:00Z"), ini = fim - (dias - 1) * DIA_MS;
+    let completos = 0, parciais = 0;
+    for (const [d, r] of Object.entries(plano.registo || {})) {
+      const t = Date.parse(d + "T00:00:00Z");
+      if (Number.isNaN(t) || t < ini || t > fim) continue;
+      if (r.feitos === r.total) completos++; else if (r.feitos > 0) parciais++;
+    }
+    return { completos, parciais };
+  }
+
+  const registoOrdenado = plano => Object.entries(plano.registo || {}).sort((a, b) => (a[0] < b[0] ? 1 : -1));
 
   /* ---------- sessão guiada (página do utente) ---------- */
   // Exercícios por fazer hoje; se já está tudo feito, a sessão repete o plano inteiro.
@@ -510,6 +605,7 @@ const Logica = (function () {
            planoDeModelo, modeloDePlano, duplicaPlano, planosComExercicio, removeExercicioDosPlanos,
            itensComExercicio, migra,
            b64url, primeiroNome, linkPlano, planoDeLink, itensDaSessao, formataSeg, passoAnterior,
+           resumoDoUtente, mensagemResumo, lerResposta, aplicaResposta, adesao, registoOrdenado, ROTULO_DOR, dataCurta,
            sha256, hashPin, pinValido, novoPin, verificaPin, esperaPin,
            slug, planoParaTexto, exportaPlano, importaPlano, exportaCopia, validaCopia, validaDefinicoes };
 })();

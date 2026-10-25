@@ -30,6 +30,31 @@
   }
   function guardaPro(d) { try { localStorage.setItem(chave, JSON.stringify(d)); return true; } catch (e) { return false; } }
 
+  /* ---------- enviar o resumo à fisioterapeuta ---------- */
+  function mostraCopia(texto) {
+    const area = h("textarea", { readonly: true, rows: 8, "aria-label": "Mensagem para enviar" }, texto);
+    const msg = h("p", { class: "muted", role: "status" });
+    const copiar = async () => {
+      try { await navigator.clipboard.writeText(texto); msg.textContent = "Mensagem copiada. Cole-a numa conversa com a sua fisioterapeuta."; }
+      catch (e) { area.select(); msg.textContent = "Selecione o texto e copie-o."; }
+    };
+    const cx = h("div", { class: "card aviso", id: "copia" },
+      h("p", { style: "margin:0 0 6px;font-weight:700" }, "Copie esta mensagem e envie-a à sua fisioterapeuta"), area,
+      h("div", { class: "linha" }, h("button", { class: "btn prim", onclick: copiar }, "Copiar mensagem")), msg);
+    const antigo = document.getElementById("copia"); if (antigo) antigo.remove();
+    app.prepend(cx); window.scrollTo(0, 0);
+  }
+
+  // Abre o WhatsApp da fisioterapeuta (se o link trouxer o número), a partilha do telemóvel, ou mostra o texto para copiar.
+  function enviaResumo(r) {
+    const p = r.plano, ids = p.itens.map(i => i.exId);
+    const resumo = Logica.resumoDoUtente(r.k, lePro(), ids, hoje());
+    const texto = Logica.mensagemResumo({ nomePlano: p.nome, paraNome: r.paraNome, resumo });
+    if (r.contacto) { window.open("https://wa.me/" + r.contacto + "?text=" + encodeURIComponent(texto), "_blank", "noopener"); return; }
+    if (navigator.share) { navigator.share({ text: texto }).catch(() => {}); return; }
+    mostraCopia(texto);
+  }
+
   /* ---------- sessão guiada ---------- */
   function bip() {
     try { if (navigator.vibrate) navigator.vibrate(250); } catch (e) { /* sem vibração */ }
@@ -85,7 +110,8 @@
         const dor = (lePro().dor || {})[dia];
         tela = [h("h2", null, "Sessão concluída!"), h("p", { style: "font-size:22px" }, "Bom trabalho. Volte amanhã ou no próximo dia do plano."),
           dor === 2 && r.aviso ? h("p", { class: "card aviso", style: "white-space:pre-wrap" }, r.aviso) : null,
-          h("button", { class: "grande", onclick: fecha }, "Fechar")];
+          r.k ? h("button", { class: "grande", onclick: () => enviaResumo(r) }, "Enviar à fisioterapeuta") : null,
+          h("button", { class: r.k ? "grande sec" : "grande", onclick: fecha }, "Fechar")];
       } else {
         const it = itens[i], e = porId.get(it.exId);
         const porTempo = it.segundos != null;
@@ -157,6 +183,8 @@
       h("div", { class: "card" }, barra, resumo),
       h("button", { class: "btn prim botao-sessao", onclick: () => sessao(r, aoMudar) },
         feitosHoje.size === total && total ? "Repetir a sessão de hoje" : feitosHoje.size ? "Continuar a sessão de hoje" : "Começar a sessão de hoje"),
+      r.k && (Object.keys(pro.dias).length || Object.keys(pro.dor || {}).length)
+        ? h("button", { class: "btn botao-sessao", style: "margin-top:-4px", onclick: () => enviaResumo(r) }, "Enviar resumo à fisioterapeuta") : null,
       h("ul", { class: "lista" }, cartoes),
       r.aviso ? h("p", { class: "muted", style: "white-space:pre-wrap" }, r.aviso) : null,
       h("p", { class: "muted" }, "O seu progresso fica só neste telemóvel. Guarde a mensagem com o link para voltar a este plano."),
