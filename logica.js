@@ -322,7 +322,8 @@ const Logica = (function () {
     }
     const def = ehObjeto(d.definicoes) ? d.definicoes : {};
     const definicoes = { profissional: ehTexto(def.profissional, 80) ? def.profissional : "", aviso: ehTexto(def.aviso, 300) ? def.aviso : "",
-                         urlUtente: ehTexto(def.urlUtente, 200) && /^https:\/\/[^\s#?]{3,200}$/.test(def.urlUtente) ? def.urlUtente : "" };
+                         urlUtente: ehTexto(def.urlUtente, 200) && /^https:\/\/[^\s#?]{3,200}$/.test(def.urlUtente) ? def.urlUtente : "",
+                         validadeDias: [0, 30, 90, 180].includes(def.validadeDias) ? def.validadeDias : 90 };
     return { ok: true, estado: { versao: 2, exercicios, utentes, planos, avisoVisto: d.avisoVisto === true, definicoes } };
   }
 
@@ -332,7 +333,9 @@ const Logica = (function () {
     textoMax(f, erros, "aviso", 300, "O aviso pode ter no máximo 300 caracteres.");
     const url = t(f, "urlUtente");
     if (url && !/^https:\/\/[^\s#?]{3,200}$/.test(url)) erros.urlUtente = "Escreva um endereço que comece por https:// (sem espaços).";
-    return fim(erros, { profissional: t(f, "profissional"), aviso: t(f, "aviso"), urlUtente: url });
+    const vd = f.validadeDias === undefined || f.validadeDias === "" ? 90 : Number(f.validadeDias);
+    if (![0, 30, 90, 180].includes(vd)) erros.validadeDias = "Escolha uma das validades da lista.";
+    return fim(erros, { profissional: t(f, "profissional"), aviso: t(f, "aviso"), urlUtente: url, validadeDias: vd });
   }
 
   /* ---------- link para o utente ---------- */
@@ -353,7 +356,7 @@ const Logica = (function () {
 
   const primeiroNome = n => String(n || "").trim().split(/\s+/)[0] || "";
 
-  function linkPlano(plano, utenteNome, exercicios, sementes, def) {
+  function linkPlano(plano, utenteNome, exercicios, sementes, def, agora) {
     def = def || {};
     const porId = new Map(exercicios.map(e => [e.id, e]));
     const sem = new Map(sementes.map(x => [x.id, daSemente(x, "")]));
@@ -374,6 +377,8 @@ const Logica = (function () {
     if (def.profissional) o.p = def.profissional;
     if (def.aviso) o.a = def.aviso;
     if (x.length) o.x = x;
+    // Validade (em dias desde 1970, UTC): depois dela a página recusa o link. 0 / ausente = sem limite.
+    if (def.validadeDias > 0) o.e = Math.floor(Date.parse(agora || new Date().toISOString()) / 86400000) + def.validadeDias;
     return b64url.codifica(JSON.stringify(o));
   }
 
@@ -385,6 +390,10 @@ const Logica = (function () {
     try { o = JSON.parse(b64url.descodifica(payload)); } catch (e) { return falha("Este link não está completo ou foi alterado."); }
     if (!ehObjeto(o) || o.v !== 1 || !Array.isArray(o.i) || o.i.length > MAX.itens) return falha("Este link é de uma versão que não conheço.");
     if (o.x !== undefined && (!Array.isArray(o.x) || o.x.length > MAX.exercicios)) return falha("Este link não está completo ou foi alterado.");
+    if (o.e !== undefined) {
+      if (!Number.isInteger(o.e)) return falha("Este link não está completo ou foi alterado.");
+      if (Math.floor(Date.parse(agora) / 86400000) > o.e) return { ok: false, expirado: true, erro: "Este plano já não está disponível." };
+    }
     for (const [c, max] of [["u", 80], ["p", 80], ["a", 300]]) if (o[c] !== undefined && !ehTexto(o[c], max)) return falha("Este link não está completo ou foi alterado.");
 
     const itens = [], exercicios = [], vistos = new Set();

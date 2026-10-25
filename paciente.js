@@ -82,6 +82,7 @@
     const m = /^#p=([A-Za-z0-9_-]+)$/.exec(location.hash);
     if (!m) { app.replaceChildren(...cartaoMsg("Falta o plano", "Abra o link que a sua fisioterapeuta lhe enviou.")); return; }
     const r = Logica.planoDeLink(m[1], REGIOES, OBJETIVOS, Object.keys(FIGURAS), SEMENTE, new Date().toISOString());
+    if (r.expirado) { app.replaceChildren(...cartaoMsg("Este plano já não está disponível", "Peça um novo link à sua fisioterapeuta.")); return; }
     if (!r.ok) { app.replaceChildren(...cartaoMsg("Link inválido", "Este link não está completo ou foi alterado. Peça um novo à sua fisioterapeuta.")); return; }
     document.title = r.plano.nome + " · PlanoFisio";
     const id = Array.from(Logica.sha256(new TextEncoder().encode(m[1])).slice(0, 8), x => x.toString(16).padStart(2, "0")).join("");
