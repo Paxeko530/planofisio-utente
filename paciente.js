@@ -30,6 +30,89 @@
   }
   function guardaPro(d) { try { localStorage.setItem(chave, JSON.stringify(d)); return true; } catch (e) { return false; } }
 
+  /* ---------- sessão guiada ---------- */
+  function bip() {
+    try { if (navigator.vibrate) navigator.vibrate(250); } catch (e) { /* sem vibração */ }
+    try {
+      const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+      const c = new C(), o = c.createOscillator(), g = c.createGain();
+      o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.value = 0.15;
+      o.start(); setTimeout(() => { o.stop(); c.close(); }, 350);
+    } catch (e) { /* sem som */ }
+  }
+
+  function sessao(r, aoFechar) {
+    const p = r.plano, porId = new Map(r.exercicios.map(e => [e.id, e]));
+    const pro = lePro(), dia = hoje();
+    const itens = Logica.itensDaSessao(p.itens, new Set(pro.dias[dia] || []));
+    let i = 0, serie = 1, fase = "fazer", resta = 0, rodando = false, terminou = false, tm = null, bloqueio = null;
+    const ov = h("div", { id: "sessao", role: "dialog", "aria-modal": "true", "aria-label": "Sessão guiada" });
+    document.body.append(ov); app.setAttribute("inert", "");
+    try { if (navigator.wakeLock) navigator.wakeLock.request("screen").then(w => { bloqueio = w; }).catch(() => {}); } catch (e) { /* sem ecrã ligado */ }
+
+    function fecha() {
+      clearInterval(tm); ov.remove(); app.removeAttribute("inert");
+      try { if (bloqueio) bloqueio.release(); } catch (e) { /* já libertado */ }
+      aoFechar();
+    }
+    function reinicia() { clearInterval(tm); resta = 0; rodando = false; terminou = false; }
+    function feitoSerie() {
+      reinicia();
+      const it = itens[i];
+      if (serie < it.series) { serie++; desenha(); return; }
+      const d = lePro(); const l = new Set(d.dias[dia] || []); l.add(it.exId); d.dias[dia] = [...l]; guardaPro(d);
+      serie = 1; i++;
+      fase = i >= itens.length ? "dor" : "fazer";
+      desenha();
+    }
+    function comeca(seg) {
+      reinicia(); resta = seg; rodando = true;
+      tm = setInterval(() => { resta--; if (resta <= 0) { clearInterval(tm); rodando = false; terminou = true; resta = 0; bip(); } desenha(); }, 1000);
+      desenha();
+    }
+    function regista(dor) { const d = lePro(); d.dor = d.dor || {}; d.dor[dia] = dor; guardaPro(d); fase = "fim"; desenha(); }
+
+    function desenha() {
+      let tela;
+      if (fase === "dor") {
+        tela = [h("h2", null, "Como se sentiu?"),
+          h("p", { class: "muted" }, "Escolha a resposta que mais se parece com o que sentiu hoje."),
+          h("button", { class: "grande", onclick: () => regista(0) }, "Sem dor"),
+          h("button", { class: "grande", onclick: () => regista(1) }, "Um pouco de dor"),
+          h("button", { class: "grande", onclick: () => regista(2) }, "Dor forte"),
+          h("button", { class: "grande sec", onclick: () => { fase = "fim"; desenha(); } }, "Prefiro não responder")];
+      } else if (fase === "fim") {
+        const dor = (lePro().dor || {})[dia];
+        tela = [h("h2", null, "Sessão concluída!"), h("p", { style: "font-size:22px" }, "Bom trabalho. Volte amanhã ou no próximo dia do plano."),
+          dor === 2 && r.aviso ? h("p", { class: "card aviso", style: "white-space:pre-wrap" }, r.aviso) : null,
+          h("button", { class: "grande", onclick: fecha }, "Fechar")];
+      } else {
+        const it = itens[i], e = porId.get(it.exId);
+        const porTempo = it.segundos != null;
+        const ant = Logica.passoAnterior(itens, i, serie);
+        const acao = !porTempo ? h("button", { class: "grande", onclick: feitoSerie }, "Feito")
+          : terminou ? h("button", { class: "grande", onclick: feitoSerie }, "Feito")
+          : rodando ? h("button", { class: "grande sec", onclick: () => { reinicia(); desenha(); } }, "Parar")
+          : h("button", { class: "grande", onclick: () => comeca(it.segundos) }, `Começar (${it.segundos} s)`);
+        tela = [
+          h("div", { class: "topo-sessao" }, h("span", null, `Exercício ${i + 1} de ${itens.length}`), h("button", { class: "sec-pequeno", onclick: fecha }, "Sair")),
+          h("h2", { style: "margin:6px 0" }, e.nome),
+          e.figura && FIGURAS[e.figura] ? h("div", { class: "figbox f-" + e.objetivo }, criaFigura({ ...FIGURAS[e.figura], nome: e.nome })) : null,
+          h("p", { class: "dose-grande" }, porTempo ? `${it.segundos} segundos` : `${it.repeticoes} repetições`, it.nota ? " " + it.nota : ""),
+          h("p", { class: "serie" }, `Série ${serie} de ${it.series}`),
+          porTempo && (rodando || terminou) ? h("p", { class: "relogio", role: "timer", "aria-live": "off" }, terminou ? "Pronto!" : Logica.formataSeg(resta)) : null,
+          h("p", { style: "font-size:20px;line-height:1.45" }, e.descricao),
+          e.cuidados ? h("p", { class: "muted" }, "Cuidados: " + e.cuidados) : null,
+          acao,
+          ant ? h("button", { class: "grande sec", onclick: () => { reinicia(); i = ant.i; serie = ant.serie; desenha(); } }, "Voltar atrás") : null,
+        ];
+      }
+      ov.replaceChildren(h("div", { class: "sessao-caixa" }, tela.filter(Boolean)));
+      ov.scrollTop = 0;
+    }
+    desenha();
+  }
+
   /* ---------- vista ---------- */
   function vista(r, aoMudar) {
     const p = r.plano;
@@ -72,6 +155,8 @@
         h("p", { class: "sub" }, (r.paraNome ? "Para " + r.paraNome + " · " : "") + `${p.frequencia}× por semana · ${plural(total, "exercício", "exercícios")}`)),
       p.notas ? h("div", { class: "card aviso" }, h("p", { style: "margin:0;white-space:pre-wrap" }, p.notas)) : null,
       h("div", { class: "card" }, barra, resumo),
+      h("button", { class: "btn prim botao-sessao", onclick: () => sessao(r, aoMudar) },
+        feitosHoje.size === total && total ? "Repetir a sessão de hoje" : feitosHoje.size ? "Continuar a sessão de hoje" : "Começar a sessão de hoje"),
       h("ul", { class: "lista" }, cartoes),
       r.aviso ? h("p", { class: "muted", style: "white-space:pre-wrap" }, r.aviso) : null,
       h("p", { class: "muted" }, "O seu progresso fica só neste telemóvel. Guarde a mensagem com o link para voltar a este plano."),
