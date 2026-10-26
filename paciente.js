@@ -22,6 +22,7 @@
 
   /* ---------- progresso (só neste telemóvel) ---------- */
   let chave = null;
+  let desenhaAgora = () => {};
   const hoje = () => new Date().toLocaleDateString("sv-SE");   // AAAA-MM-DD, hora local
 
   function lePro() {
@@ -29,6 +30,23 @@
     return { dias: {} };
   }
   function guardaPro(d) { try { localStorage.setItem(chave, JSON.stringify(d)); return true; } catch (e) { return false; } }
+
+  /* ---------- privacidade ---------- */
+  function cartaoPrivacidade() {
+    return h("div", { class: "card" },
+      h("h3", { style: "margin:0 0 6px" }, "Privacidade"),
+      h("ul", { class: "muted", style: "margin:0;padding-left:18px" },
+        h("li", null, "O plano foi-lhe enviado pela sua fisioterapeuta. O link contém o plano e o seu primeiro nome."),
+        h("li", null, "O seu progresso («Feito hoje» e a dor) fica guardado só neste telemóvel, no navegador. Nada é enviado automaticamente."),
+        h("li", null, "Só envia informação quando toca em «Enviar resumo» e escolhe a conversa."),
+        h("li", null, "Esta página não usa anúncios nem análise de visitas. Como em qualquer site, o alojamento pode registar o acesso técnico; o plano vai no link, depois do #, e não é enviado ao servidor."),
+        h("li", null, "Pode apagar aqui o progresso deste plano a qualquer momento.")),
+      h("div", { class: "linha" }, h("button", { class: "btn perigo", onclick: () => {
+        if (!window.confirm("Apagar o seu progresso deste plano neste telemóvel? Não é possível desfazer.")) return;
+        try { localStorage.removeItem(chave); } catch (e) { /* sem armazenamento */ }
+        desenhaAgora();
+      } }, "Apagar o meu progresso")));
+  }
 
   /* ---------- enviar o resumo à fisioterapeuta ---------- */
   function mostraCopia(texto) {
@@ -219,6 +237,7 @@
         ? h("button", { class: "btn botao-sessao", style: "margin-top:-4px", onclick: () => enviaResumo(r) }, "Enviar resumo à fisioterapeuta") : null,
       h("ul", { class: "lista" }, cartoes),
       cartaoLembretes(r),
+      cartaoPrivacidade(),
       r.aviso ? h("p", { class: "muted", style: "white-space:pre-wrap" }, r.aviso) : null,
       h("p", { class: "muted" }, "O seu progresso fica só neste telemóvel. Guarde a mensagem com o link para voltar a este plano."),
     ];
@@ -234,6 +253,7 @@
     const id = Array.from(Logica.sha256(new TextEncoder().encode(m[1])).slice(0, 8), x => x.toString(16).padStart(2, "0")).join("");
     chave = "pf-utente-" + id;
     const desenha = () => { const y = window.scrollY; app.replaceChildren(...vista(r, desenha).flat().filter(Boolean)); window.scrollTo(0, y); };
+    desenhaAgora = desenha;
     desenha();
   }
 

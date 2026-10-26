@@ -107,6 +107,30 @@ const Logica = (function () {
     return antes - estado.planos.length;
   }
 
+  // Dados de um utente num ficheiro (pedido de acesso ou portabilidade). Os exercícios vão pelo nome, não por id.
+  function exportaUtente(estado, utenteId, agora) {
+    const u = estado.utentes.find(x => x.id === utenteId);
+    if (!u) return null;
+    const nomes = new Map(estado.exercicios.map(e => [e.id, e.nome]));
+    return {
+      formato: "planofisio-utente", versao: 1, exportadoEm: agora,
+      utente: { nome: u.nome, notas: u.notas || "", arquivado: !!u.arquivado, consentimento: u.consentimento || null, criado: u.criado, alterado: u.alterado },
+      planos: estado.planos.filter(p => p.utenteId === utenteId).map(p => ({
+        nome: p.nome, frequencia: p.frequencia, notas: p.notas || "",
+        exercicios: p.itens.map(i => ({ exercicio: nomes.get(i.exId) || i.exId, series: i.series, repeticoes: i.repeticoes, segundos: i.segundos, nota: i.nota || "" })),
+        registo: p.registo || {},
+      })),
+    };
+  }
+
+  // Regista (ou retira) a data em que o utente deu o consentimento para tratar os seus dados.
+  function registaConsentimento(utente, hoje) {
+    if (hoje === null) { delete utente.consentimento; return true; }
+    if (!diaValido(hoje)) return false;
+    utente.consentimento = { data: hoje };
+    return true;
+  }
+
   /* ---------- planos ---------- */
   function validaPlano(f) {
     const erros = {};
@@ -312,6 +336,7 @@ const Logica = (function () {
       const r = validaUtente(u);
       if (!r.ok) return falha("A cópia tem um utente inválido.");
       utentes.push({ id: u.id, ...r.valor, arquivado: u.arquivado === true,
+                     ...(ehObjeto(u.consentimento) && diaValido(u.consentimento.data) ? { consentimento: { data: u.consentimento.data } } : {}),
                      criado: ehTexto(u.criado, 40) ? u.criado : "", alterado: ehTexto(u.alterado, 40) ? u.alterado : "" });
     }
     const ids = new Set(utentes.map(u => u.id));
@@ -657,7 +682,7 @@ const Logica = (function () {
     return null;
   }
 
-  return { norm, novoId, inteiro, valida, filtra, doseTexto, daSemente, repoeSementes, duplica,
+  return { norm, novoId, inteiro, valida, filtra, doseTexto, daSemente, repoeSementes, duplica, exportaUtente, registaConsentimento,
            validaUtente, filtraUtentes, apagaUtente,
            validaPlano, validaDose, novoPlano, adicionaItem, moveItem, removeItem,
            planoDeModelo, modeloDePlano, duplicaPlano, planosComExercicio, removeExercicioDosPlanos,
