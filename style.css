@@ -123,3 +123,10 @@ body.teclado #aviso-estado{bottom:20px}
 .relogio{font-size:64px;font-weight:700;text-align:center;margin:6px 0;font-variant-numeric:tabular-nums}
 button.grande{display:block;width:100%;min-height:64px;font-size:22px;font-weight:700;margin:12px 0;border-radius:8px;border:1px solid var(--acao);background:var(--acao);color:#fff;cursor:pointer}
 button.grande.sec{background:var(--card);color:var(--ink);border-color:var(--line);font-weight:400}
+
+/* evolução do utente */
+.tempo{display:grid;grid-template-columns:repeat(14,1fr);gap:4px}
+.tempo .dia{display:block;aspect-ratio:1;border-radius:4px;background:var(--line);border:2px solid transparent}
+.tempo .dia.completo{background:var(--verde-t)}
+.tempo .dia.parcial{background:#D9A441}
+.tempo .dia.forte{border-color:var(--alerta)}

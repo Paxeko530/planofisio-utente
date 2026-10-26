@@ -116,7 +116,7 @@ const Logica = (function () {
       formato: "planofisio-utente", versao: 1, exportadoEm: agora,
       utente: { nome: u.nome, notas: u.notas || "", arquivado: !!u.arquivado, consentimento: u.consentimento || null, criado: u.criado, alterado: u.alterado },
       planos: estado.planos.filter(p => p.utenteId === utenteId).map(p => ({
-        nome: p.nome, frequencia: p.frequencia, notas: p.notas || "",
+        nome: p.nome, frequencia: p.frequencia, notas: p.notas || "", fase: p.fase || 1, concluido: p.estado === "concluido",
         exercicios: p.itens.map(i => ({ exercicio: nomes.get(i.exId) || i.exId, series: i.series, repeticoes: i.repeticoes, segundos: i.segundos, nota: i.nota || "" })),
         registo: p.registo || {},
       })),
@@ -179,21 +179,71 @@ const Logica = (function () {
 
   function planoDeModelo(modelo, utenteId, agora) {
     const n = { ...modelo, id: novoId("p"), utenteId, itens: copiaItens(modelo.itens), criado: agora, alterado: agora };
-    delete n.registo;
+    delete n.registo; delete n.fase; delete n.anterior; delete n.estado;
     return n;
   }
 
   function modeloDePlano(plano, nome, agora) {
     const n = { ...plano, id: novoId("p"), utenteId: null, nome, itens: copiaItens(plano.itens), criado: agora, alterado: agora };
-    delete n.registo;
+    delete n.registo; delete n.fase; delete n.anterior; delete n.estado;
     return n;
   }
 
   function duplicaPlano(plano, agora) {
     const n = { ...plano, id: novoId("p"), nome: (plano.nome + " (cópia)").slice(0, 80), itens: copiaItens(plano.itens), criado: agora, alterado: agora };
-    delete n.registo;
+    delete n.registo; delete n.fase; delete n.anterior; delete n.estado;
     return n;
   }
+
+  /* ---------- evolução por fases ---------- */
+  // «Semana 1» → «Semana 2»; sem número no fim → «Nome (fase 2)».
+  function proximoNome(nome, fase) {
+    const n = String(nome).trim();
+    const m = /^(.*[^0-9])([0-9]+)$/.exec(n);
+    return (m ? m[1] + (Number(m[2]) + 1) : n + " (fase " + fase + ")").slice(0, 80);
+  }
+
+  // Cria a fase seguinte (mesmos exercícios e doses, sem registo) e marca a atual como concluída.
+  function proximaFase(plano, agora) {
+    const fase = (plano.fase || 1) + 1;
+    const n = { ...plano, id: novoId("p"), nome: proximoNome(plano.nome, fase), fase, anterior: plano.id,
+                itens: copiaItens(plano.itens), criado: agora, alterado: agora };
+    delete n.registo; delete n.estado;
+    plano.estado = "concluido"; plano.alterado = agora;
+    return n;
+  }
+
+  // Números de um plano a partir do registo do utente.
+  function resumoPlano(plano) {
+    let completos = 0, parciais = 0, dorForte = 0, ultima = null, dorUltima = null;
+    const reg = Object.entries(plano.registo || {});
+    for (const [d, r] of reg) {
+      if (r.feitos === r.total) completos++; else if (r.feitos > 0) parciais++;
+      if (r.dor === 2) dorForte++;
+      if (ultima === null || d > ultima) { ultima = d; dorUltima = r.dor; }
+    }
+    return { dias: reg.length, completos, parciais, dorForte, ultima, dorUltima };
+  }
+
+  // Os últimos `dias` dias (do mais antigo ao de hoje), juntando o registo de todos os planos do utente.
+  function linhaDoTempo(planos, hoje, dias) {
+    const fim = Date.parse(hoje + "T00:00:00Z"), out = [];
+    for (let i = dias - 1; i >= 0; i--) {
+      const d = new Date(fim - i * 86400000).toISOString().slice(0, 10);
+      let estado = "nenhum", dor = null;
+      for (const p of planos) {
+        const r = (p.registo || {})[d];
+        if (!r) continue;
+        if (r.feitos === r.total) estado = "completo"; else if (r.feitos > 0 && estado === "nenhum") estado = "parcial";
+        if (r.dor !== null && (dor === null || r.dor > dor)) dor = r.dor;
+      }
+      out.push({ dia: d, estado, dor });
+    }
+    return out;
+  }
+
+  // Ativos primeiro (fase mais recente no topo), concluídos depois.
+  const ordemPlanos = (a, b) => ((a.estado === "concluido") - (b.estado === "concluido")) || ((b.fase || 1) - (a.fase || 1)) || (a.criado < b.criado ? 1 : -1);
 
   const planosComExercicio = (planos, exId) => planos.filter(p => p.itens.some(i => i.exId === exId)).length;
 
@@ -357,6 +407,9 @@ const Logica = (function () {
         }
       }
       planos.push({ id: p.id, utenteId: p.utenteId, ...r.valor, itens, registo,
+                    ...(Number.isInteger(p.fase) && p.fase >= 1 && p.fase <= 99 ? { fase: p.fase } : {}),
+                    ...(idSeguro(p.anterior) ? { anterior: p.anterior } : {}),
+                    ...(p.estado === "concluido" ? { estado: "concluido" } : {}),
                     criado: ehTexto(p.criado, 40) ? p.criado : "", alterado: ehTexto(p.alterado, 40) ? p.alterado : "" });
     }
     const def = ehObjeto(d.definicoes) ? d.definicoes : {};
@@ -682,7 +735,7 @@ const Logica = (function () {
     return null;
   }
 
-  return { norm, novoId, inteiro, valida, filtra, doseTexto, daSemente, repoeSementes, duplica, exportaUtente, registaConsentimento,
+  return { norm, novoId, inteiro, valida, filtra, doseTexto, daSemente, repoeSementes, duplica, exportaUtente, registaConsentimento, proximoNome, proximaFase, resumoPlano, linhaDoTempo, ordemPlanos,
            validaUtente, filtraUtentes, apagaUtente,
            validaPlano, validaDose, novoPlano, adicionaItem, moveItem, removeItem,
            planoDeModelo, modeloDePlano, duplicaPlano, planosComExercicio, removeExercicioDosPlanos,
