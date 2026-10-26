@@ -431,7 +431,7 @@ const Logica = (function () {
     const r = importaPlano({ exercicios: [] }, { formato: "planofisio-plano", versao: 1,
       plano: { nome: o.n, frequencia: o.f, notas: o.o || "", itens }, exercicios }, regioes, objetivos, figuras, agora);
     if (!r.ok) return falha("Este link não está completo ou foi alterado.");
-    return { ok: true, plano: r.plano, exercicios: r.novos, paraNome: o.u || "", profissional: o.p || "", aviso: o.a || "", k: o.k || "", contacto: o.c || "" };
+    return { ok: true, plano: r.plano, exercicios: r.novos, paraNome: o.u || "", profissional: o.p || "", aviso: o.a || "", k: o.k || "", contacto: o.c || "", expiraEm: Number.isInteger(o.e) ? o.e : null };
   }
 
   /* ---------- resposta do utente (resumo enviado por mensagem) ---------- */
@@ -507,6 +507,64 @@ const Logica = (function () {
   }
 
   const registoOrdenado = plano => Object.entries(plano.registo || {}).sort((a, b) => (a[0] < b[0] ? 1 : -1));
+
+  /* ---------- lembretes (ficheiro de calendário .ics) ---------- */
+  // Gera um evento semanal repetido nos dias do plano. Hora «flutuante» (a do calendário do utente), sem fusos.
+  const CRLF = String.fromCharCode(13, 10);
+  const BARRA = String.fromCharCode(92);
+  const DIAS_POR_FREQ = { 1: ["WE"], 2: ["TU", "FR"], 3: ["MO", "WE", "FR"], 4: ["MO", "TU", "TH", "FR"],
+                          5: ["MO", "TU", "WE", "TH", "FR"], 6: ["MO", "TU", "WE", "TH", "FR", "SA"], 7: ["MO", "TU", "WE", "TH", "FR", "SA", "SU"] };
+  const SEMANA_UTC = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];   // Date.getUTCDay()
+
+  // N vezes por semana → dias da semana o mais espaçados possível. null se N for inválido.
+  const diasDaSemana = freq => (Number.isInteger(freq) && DIAS_POR_FREQ[freq] ? DIAS_POR_FREQ[freq].slice() : null);
+
+  // Texto de uma propriedade iCalendar (RFC 5545): escapa barra, ponto e vírgula, vírgula e quebras de linha.
+  const escIcs = s => String(s == null ? "" : s).split(BARRA).join(BARRA + BARRA).split(";").join(BARRA + ";").split(",").join(BARRA + ",")
+    .split(String.fromCharCode(13)).join("").split(String.fromCharCode(10)).join(BARRA + "n");
+
+  // Linhas com mais de 75 octetos são dobradas (CRLF + espaço), sem partir carateres de vários bytes.
+  function dobraIcs(linha) {
+    const enc = new TextEncoder();
+    let out = "", n = 0;
+    for (const c of linha) {
+      const b = enc.encode(c).length;
+      if (n + b > 75) { out += CRLF + " "; n = 1; }
+      out += c; n += b;
+    }
+    return out;
+  }
+
+  const dd = n => String(n).padStart(2, "0");
+  const dataHoraIcs = d => d.getUTCFullYear() + dd(d.getUTCMonth() + 1) + dd(d.getUTCDate()) + "T" + dd(d.getUTCHours()) + dd(d.getUTCMinutes()) + "00";
+
+  // inicio/ate: «AAAA-MM-DD»; hm: [hora, minuto]. Devolve o texto do .ics ou null se os dados não servirem.
+  function criaIcs({ nome, freq, hm, inicio, ate, url, uid, agoraISO }) {
+    const dias = diasDaSemana(freq);
+    if (!dias || !diaValido(inicio) || !diaValido(ate) || !Array.isArray(hm) || !Number.isInteger(hm[0]) || !Number.isInteger(hm[1])
+        || hm[0] < 0 || hm[0] > 23 || hm[1] < 0 || hm[1] > 59 || !idSeguro(uid)) return null;
+    let d = new Date(inicio + "T00:00:00Z"), achou = false;
+    for (let i = 0; i < 7; i++) {
+      if (dias.includes(SEMANA_UTC[d.getUTCDay()])) { achou = true; break; }
+      d = new Date(d.getTime() + DIA_MS);
+    }
+    if (!achou) return null;
+    const ini = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hm[0], hm[1]));
+    const fim = new Date(ini.getTime() + 30 * 60000);
+    const limite = new Date(ate + "T00:00:00Z");
+    if (limite.getTime() < new Date(Date.UTC(ini.getUTCFullYear(), ini.getUTCMonth(), ini.getUTCDate())).getTime()) return null;
+    const ag = new Date(agoraISO || new Date().toISOString());
+    const stamp = dataHoraIcs(ag).slice(0, 13) + dd(ag.getUTCSeconds()) + "Z";
+    const L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//PlanoFisio//PT", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+      "BEGIN:VEVENT", "UID:" + uid + "@planofisio", "DTSTAMP:" + stamp,
+      "DTSTART:" + dataHoraIcs(ini), "DTEND:" + dataHoraIcs(fim),
+      "RRULE:FREQ=WEEKLY;BYDAY=" + dias.join(",") + ";UNTIL=" + limite.getUTCFullYear() + dd(limite.getUTCMonth() + 1) + dd(limite.getUTCDate()) + "T235959",
+      "SUMMARY:" + escIcs("Exercícios: " + nome),
+      "DESCRIPTION:" + escIcs("Abra o seu plano de exercícios:" + String.fromCharCode(10) + (url || "")),
+      "BEGIN:VALARM", "TRIGGER:-PT10M", "ACTION:DISPLAY", "DESCRIPTION:" + escIcs("Exercícios: " + nome), "END:VALARM",
+      "END:VEVENT", "END:VCALENDAR"];
+    return L.map(dobraIcs).join(CRLF) + CRLF;
+  }
 
   /* ---------- sessão guiada (página do utente) ---------- */
   // Exercícios por fazer hoje; se já está tudo feito, a sessão repete o plano inteiro.
@@ -606,6 +664,7 @@ const Logica = (function () {
            itensComExercicio, migra,
            b64url, primeiroNome, linkPlano, planoDeLink, itensDaSessao, formataSeg, passoAnterior,
            resumoDoUtente, mensagemResumo, lerResposta, aplicaResposta, adesao, registoOrdenado, ROTULO_DOR, dataCurta,
+           diasDaSemana, criaIcs, escIcs, dobraIcs,
            sha256, hashPin, pinValido, novoPin, verificaPin, esperaPin,
            slug, planoParaTexto, exportaPlano, importaPlano, exportaCopia, validaCopia, validaDefinicoes };
 })();

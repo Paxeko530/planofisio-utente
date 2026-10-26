@@ -55,6 +55,38 @@
     mostraCopia(texto);
   }
 
+  /* ---------- lembretes no calendário ---------- */
+  let horaLembrete = "18:00";
+
+  // Cria um ficheiro .ics (evento semanal nos dias do plano, aviso 10 min antes) e entrega-o ao telemóvel.
+  function pedeLembretes(r, estado) {
+    const hm = horaLembrete.split(":").map(Number);
+    const hojeS = hoje();
+    const limite = r.expiraEm != null ? new Date(r.expiraEm * 86400000).toISOString().slice(0, 10)
+      : new Date(Date.parse(hojeS + "T00:00:00Z") + 84 * 86400000).toISOString().slice(0, 10);
+    const ics = Logica.criaIcs({ nome: r.plano.nome, freq: r.plano.frequencia, hm, inicio: hojeS, ate: limite,
+      url: location.href, uid: r.k || chave, agoraISO: new Date().toISOString() });
+    if (!ics) { estado.textContent = "Não foi possível criar os lembretes: o plano termina antes do primeiro dia."; return; }
+    const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar;charset=utf-8" }));
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) window.location.assign(url);
+    else { const a = h("a", { href: url, download: "lembretes-plano.ics" }); document.body.append(a); a.click(); a.remove(); }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    estado.textContent = "Pronto. Abra o ficheiro que foi guardado para pôr os lembretes no calendário.";
+  }
+
+  function cartaoLembretes(r) {
+    const estado = h("p", { id: "msg-lembretes", class: "muted", role: "status", style: "margin:8px 0 0" });
+    return h("div", { class: "card" },
+      h("h3", { style: "margin:0 0 4px" }, "Lembretes"),
+      h("p", { class: "muted", style: "margin:0" }, `Põe lembretes no calendário do telemóvel, ${r.plano.frequencia}× por semana, com um aviso 10 minutos antes.`),
+      h("label", { for: "hora-lembrete" }, "A que horas?"),
+      h("select", { id: "hora-lembrete", onchange: ev => { horaLembrete = ev.target.value; } },
+        [["09:00", "De manhã (9:00)"], ["15:00", "À tarde (15:00)"], ["18:00", "Ao fim do dia (18:00)"], ["20:00", "À noite (20:00)"]]
+          .map(([v, t]) => h("option", { value: v, selected: v === horaLembrete }, t))),
+      h("div", { class: "linha" }, h("button", { class: "btn", onclick: () => pedeLembretes(r, estado) }, "Pôr lembretes no calendário")),
+      estado);
+  }
+
   /* ---------- sessão guiada ---------- */
   function bip() {
     try { if (navigator.vibrate) navigator.vibrate(250); } catch (e) { /* sem vibração */ }
@@ -186,6 +218,7 @@
       r.k && (Object.keys(pro.dias).length || Object.keys(pro.dor || {}).length)
         ? h("button", { class: "btn botao-sessao", style: "margin-top:-4px", onclick: () => enviaResumo(r) }, "Enviar resumo à fisioterapeuta") : null,
       h("ul", { class: "lista" }, cartoes),
+      cartaoLembretes(r),
       r.aviso ? h("p", { class: "muted", style: "white-space:pre-wrap" }, r.aviso) : null,
       h("p", { class: "muted" }, "O seu progresso fica só neste telemóvel. Guarde a mensagem com o link para voltar a este plano."),
     ];
