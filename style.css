@@ -57,6 +57,8 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 #aviso-estado.ver{opacity:1}
 @media (prefers-reduced-motion:reduce){#aviso-estado{transition:none}}
 
+h1:focus,h2:focus{outline:none}
+
 /* abas */
 #abas{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;background:var(--card);border-top:1px solid var(--line);
   padding-bottom:env(safe-area-inset-bottom,0)}

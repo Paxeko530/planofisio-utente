@@ -201,7 +201,7 @@
 
     const barra = h("div", { class: "bar", role: "progressbar", "aria-valuemin": 0, "aria-valuemax": total, "aria-valuenow": feitosHoje.size, "aria-label": "Exercícios feitos hoje" },
       h("i", { style: `width:${total ? Math.round(100 * feitosHoje.size / total) : 0}%` }));
-    const resumo = h("p", { class: "sub", style: "margin:6px 0 0" },
+    const resumo = h("p", { class: "sub", role: "status", style: "margin:6px 0 0" },
       feitosHoje.size === total && total ? "Hoje está completo. Bom trabalho!" : `Hoje: ${feitosHoje.size} de ${total} exercícios feitos.`,
       diasCompletos ? ` Dias completos: ${diasCompletos}.` : "");
 
@@ -251,7 +251,14 @@
     if (!r.ok) { app.replaceChildren(...cartaoMsg("Link inválido", "Este link não está completo ou foi alterado. Peça um novo à sua fisioterapeuta.")); return; }
     document.title = r.plano.nome + " · PlanoFisio";
     const id = Array.from(Logica.sha256(new TextEncoder().encode(m[1])).slice(0, 8), x => x.toString(16).padStart(2, "0")).join("");
-    chave = "pf-utente-" + id;
+    // O progresso fica preso ao plano (o link novo do mesmo plano mantém-no); links sem id usam o texto do link.
+    chave = "pf-utente-" + (r.k ? "k-" + r.k : id);
+    if (r.k) {   // migração: progresso guardado por versões anteriores com a chave do texto do link
+      try {
+        const antiga = localStorage.getItem("pf-utente-" + id);
+        if (antiga && !localStorage.getItem(chave)) localStorage.setItem(chave, antiga);
+      } catch (e) { /* sem armazenamento */ }
+    }
     const desenha = () => { const y = window.scrollY; app.replaceChildren(...vista(r, desenha).flat().filter(Boolean)); window.scrollTo(0, y); };
     desenhaAgora = desenha;
     desenha();
