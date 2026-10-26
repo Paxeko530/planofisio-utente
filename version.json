@@ -1,8 +1,8 @@
 {
-  "versionCode": 19,
-  "versionName": "0.14.0",
-  "sha256": "43709ca3d9aa23aa1d249eb6b39b94725f95ab821523582956c510681809ee01",
-  "tamanho": 1735095,
-  "url": "https://github.com/Paxeko530/planofisio-utente/releases/download/v0.14.0/PlanoFisio-0.14.0.apk",
-  "notas": "Evolução por fases: criar a próxima fase de um plano, estado concluído e linha do tempo de 28 dias na ficha do utente."
+  "versionCode": 20,
+  "versionName": "0.14.1",
+  "sha256": "6c82646c213b65002da8b5b011fab5d8bb63b3cc3692aa666b35bbfe5d44dfd0",
+  "tamanho": 1735097,
+  "url": "https://github.com/Paxeko530/planofisio-utente/releases/download/v0.14.1/PlanoFisio-0.14.1.apk",
+  "notas": "Correções da auditoria: rotação do ecrã, cópias internas, progresso do utente ao reenviar o link, botão Voltar e acessibilidade."
 }
