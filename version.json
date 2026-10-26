@@ -1,8 +1,8 @@
 {
-  "versionCode": 17,
-  "versionName": "0.12.1",
-  "sha256": "e02c4493c3d7eabf4e20c3f2fde440abc86076d561664c07df244fcc450874bc",
+  "versionCode": 18,
+  "versionName": "0.13.0",
+  "sha256": "b739f1d3f738d40ce05387a60b4dbe0a0b56d00eecba0f03661ed88335547898",
   "tamanho": 1731000,
-  "url": "https://github.com/Paxeko530/planofisio-utente/releases/download/v0.12.1/PlanoFisio-0.12.1.apk",
-  "notas": "Versão de teste da atualização dentro da app (igual à 0.12.0)."
+  "url": "https://github.com/Paxeko530/planofisio-utente/releases/download/v0.13.0/PlanoFisio-0.13.0.apk",
+  "notas": "Privacidade: consentimento do utente, exportar dados de um utente, aviso de privacidade e apagar progresso na página do utente."
 }
