@@ -1,8 +1,8 @@
 {
-  "versionCode": 20,
-  "versionName": "0.14.1",
-  "sha256": "6c82646c213b65002da8b5b011fab5d8bb63b3cc3692aa666b35bbfe5d44dfd0",
-  "tamanho": 1735097,
-  "url": "https://github.com/Paxeko530/planofisio-utente/releases/download/v0.14.1/PlanoFisio-0.14.1.apk",
-  "notas": "Correções da auditoria: rotação do ecrã, cópias internas, progresso do utente ao reenviar o link, botão Voltar e acessibilidade."
+  "versionCode": 21,
+  "versionName": "0.15.0",
+  "sha256": "f2f6296dd673ab2181d88199874fc4cf6aa2130d62023eed3963e572a6995107",
+  "tamanho": 1739253,
+  "url": "https://github.com/Paxeko530/planofisio-utente/releases/download/v0.15.0/PlanoFisio-0.15.0.apk",
+  "notas": "Novo: as cópias de segurança podem ser cifradas com palavra-passe ao exportar (opcional). Sem a palavra-passe não há recuperação."
 }
